@@ -40,8 +40,10 @@ ECHO_MSG=	$(ECHO) ===\>
 MKDIRHIER=	$(top_srcdir)/../tools/mkdirhier
 
 CPPFLAGS+=	$(CPPFLAGS_$(ARCH))
-CFLAGS+=	-O2 -g -Wall -Wshadow  -Wconversion \
+CFLAGS+=	-O2 -g -Wall -Wshadow  \
 		$(CFLAGS_$(ARCH))
+#This was giving me erroneous warnings
+#CFLAGS+=	-Wconversion
 LDFLAGS+=	$(LDFLAGS_$(ARCH))
 
 ifeq ("$(CC_VERSION)", "4")
