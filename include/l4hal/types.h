@@ -24,16 +24,14 @@
 /* authors and should not be interpreted as representing official policies, either expressed */
 /* or implied, of Boston University */
 
+#ifndef _TYPES_H_
+#define _TYPES_H_
 
-#include <l4io.h>
-#include <l4/kdebug.h>
-#include <l4hal/pci.h>
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef char s8;
+typedef short s16;
+typedef int s32;
 
-int main (void) {
-  printf("Hello World!\n");
-
-  pci_init();
-
-  for (;;)
-    L4_KDB_Enter("EOW");
-}
+#endif

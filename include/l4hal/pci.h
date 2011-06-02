@@ -24,16 +24,11 @@
 /* authors and should not be interpreted as representing official policies, either expressed */
 /* or implied, of Boston University */
 
+#ifndef _PCI_H_
+#define _PCI_H_
 
-#include <l4io.h>
-#include <l4/kdebug.h>
-#include <l4hal/pci.h>
+#include <l4hal/types.h>
 
-int main (void) {
-  printf("Hello World!\n");
+void pci_init(void);
 
-  pci_init();
-
-  for (;;)
-    L4_KDB_Enter("EOW");
-}
+#endif

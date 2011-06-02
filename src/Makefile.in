@@ -35,11 +35,12 @@ PROGRAM=	root
 PROGRAM_DEPS=	$(top_builddir)/lib/l4/libl4.a \
 		$(top_builddir)/lib/io/libio.a
 
-SRCS=		crt0-$(ARCH).S main.c $($(ARCH)_SRCS) pci.c sysio-$(ARCH).c
+SRCS=		main.c pci.c \
+		crt0-$(ARCH).S $($(ARCH)_SRCS)
 
 LIBS+=		-ll4 -lio
 LDFLAGS+=	-Ttext=$(ROOTTASK_LINKBASE)
-
+CFLAGS+=	-I$(top_srcdir)/src/arch/$(ARCH)/include 
 CFLAGS_powerpc+=	-fno-builtin -msoft-float
 CXXFLAGS_powerpc+=	-fno-rtti
 

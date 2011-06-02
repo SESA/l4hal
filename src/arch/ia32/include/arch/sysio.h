@@ -24,16 +24,34 @@
 /* authors and should not be interpreted as representing official policies, either expressed */
 /* or implied, of Boston University */
 
+#include <l4hal/types.h>
 
-#include <l4io.h>
-#include <l4/kdebug.h>
-#include <l4hal/pci.h>
+static inline u32 sysIn32 (u16 port) {
+  u32 ret;
+  __asm__ volatile ("inl %w1,%0":"=a"(ret) : "Nd"(port));
+  return ret;
+}
 
-int main (void) {
-  printf("Hello World!\n");
+static inline u16 sysIn16 (u16 port) {
+  u16 ret;
+  __asm__ volatile ("inw %w1,%w0":"=a"(ret) : "Nd"(port));
+  return ret;
+}
 
-  pci_init();
+static inline u8 sysIn8 (u16 port) {
+  u16 ret;
+  __asm__ volatile ("inb %w1,%b0":"=a"(ret) : "Nd"(port));
+  return ret;
+}
 
-  for (;;)
-    L4_KDB_Enter("EOW");
+static inline void sysOut32 (u16 port, u32 val) {
+  __asm__ volatile ("outl %0,%w1"::"a"(val), "Nd" (port));
+}
+
+static inline void sysOut16 (u16 port, u16 val) {
+  __asm__ volatile ("outw %w0,%w1"::"a"(val), "Nd" (port));
+}
+
+static inline void sysOut8 (u16 port, u8 val) {
+  __asm__ volatile ("outb %b0,%w1"::"a"(val), "Nd" (port));
 }

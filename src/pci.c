@@ -1,95 +1,114 @@
-#include "sysio.h"
-#include "pci.h"
+/* Copyright 2011 Boston University. All rights reserved. */
 
-unsigned int pciConfigRead32 (unsigned char bus, unsigned char slot,     
-				unsigned short func, unsigned short offset)
-{
-  unsigned int address;
-  unsigned int lbus = (unsigned int)bus;
-  unsigned int lslot = (unsigned int)slot;
-  unsigned int lfunc = (unsigned int)func;
-  unsigned int ret;
-  
-  /*  PCI CONFIG_ADDRESS FORMAT  */
-  /* |   Bit |         Purpose | */
-  /* --------------------------- */
-  /* |    31 |      Enable Bit | */
-  /* | 30-24 |        Reserved | */
-  /* | 23-16 |      Bus Number | */
-  /* | 15-11 |   Device Number | */
-  /* |  10-8 | Function Number | */
-  /* |   7-2 | Register Number | */
-  /* |   1-0 |              00 | */
-  address = (unsigned int)((lbus << 16) | (lslot << 11) |
-			   (lfunc << 8) | (offset & 0xfc) |
-			   ((unsigned int)0x80000000));
-  
-  /* write out the address */
-  sysOut32((unsigned short)0xCF8, address);
-  
-  /* read in the data */
-  ret = (unsigned int)sysIn32(0xCFC);
-  return ret;
+/* Redistribution and use in source and binary forms, with or without modification, are */
+/* permitted provided that the following conditions are met: */
+
+/*    1. Redistributions of source code must retain the above copyright notice, this list of */
+/*       conditions and the following disclaimer. */
+
+/*    2. Redistributions in binary form must reproduce the above copyright notice, this list */
+/*       of conditions and the following disclaimer in the documentation and/or other materials */
+/*       provided with the distribution. */
+
+/* THIS SOFTWARE IS PROVIDED BY BOSTON UNIVERSITY ``AS IS'' AND ANY EXPRESS OR IMPLIED */
+/* WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND */
+/* FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL BOSTON UNIVERSITY OR */
+/* CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR */
+/* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR */
+/* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON */
+/* ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING */
+/* NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF */
+/* ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
+
+/* The views and conclusions contained in the software and documentation are those of the */
+/* authors and should not be interpreted as representing official policies, either expressed */
+/* or implied, of Boston University */
+
+#include <l4io.h>
+#include <arch/sysio.h>
+#include <l4hal/pci.h>
+
+static u32 pciConfigRead32 (u8 bus, u8 slot, u16 func, u16 offset) {
+  sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
+	   offset);
+  return sysIn32(0xCFC);
 }
 
-unsigned short pciConfigRead16 (unsigned char bus, unsigned char slot,     
-				unsigned short func, unsigned short offset)
-{
-  unsigned int address;
-  unsigned int lbus = (unsigned int)bus;
-  unsigned int lslot = (unsigned int)slot;
-  unsigned int lfunc = (unsigned int)func;
-  unsigned short ret;
-  
-  /*  PCI CONFIG_ADDRESS FORMAT  */
-  /* |   Bit |         Purpose | */
-  /* --------------------------- */
-  /* |    31 |      Enable Bit | */
-  /* | 30-24 |        Reserved | */
-  /* | 23-16 |      Bus Number | */
-  /* | 15-11 |   Device Number | */
-  /* |  10-8 | Function Number | */
-  /* |   7-2 | Register Number | */
-  /* |   1-0 |              00 | */
-  address = (unsigned int)((lbus << 16) | (lslot << 11) |
-			   (lfunc << 8) | (offset & 0xfc) |
-			   ((unsigned int)0x80000000));
-  
-  /* write out the address */
-  sysOut32((unsigned short)0xCF8, address);
-  
-  /* read in the data */
-  ret = (unsigned short)((sysIn32(0xCFC) >> ((offset & 2) * 8)) & 0xffff);
-  return ret;
+static u16 pciConfigRead16 (u8 bus, u8 slot, u16 func, u16 offset) {
+  sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
+	   offset);
+  return sysIn16(0xCFC + (offset & 2));
 }
 
-unsigned char pciConfigRead8 (unsigned char bus, unsigned char slot,     
-			       unsigned short func, unsigned short offset)
-{
-  unsigned int address;
-  unsigned int lbus = (unsigned int)bus;
-  unsigned int lslot = (unsigned int)slot;
-  unsigned int lfunc = (unsigned int)func;
-  unsigned char ret;
-  
-  /*  PCI CONFIG_ADDRESS FORMAT  */
-  /* |   Bit |         Purpose | */
-  /* --------------------------- */
-  /* |    31 |      Enable Bit | */
-  /* | 30-24 |        Reserved | */
-  /* | 23-16 |      Bus Number | */
-  /* | 15-11 |   Device Number | */
-  /* |  10-8 | Function Number | */
-  /* |   7-2 | Register Number | */
-  /* |   1-0 |              00 | */
-  address = (unsigned int)((lbus << 16) | (lslot << 11) |
-			   (lfunc << 8) | (offset & 0xfc) |
-			   ((unsigned int)0x80000000));
-  
-  /* write out the address */
-  sysOut32((unsigned short)0xCF8, address);
-  
-  /* read in the data */
-  ret = (unsigned char)((sysIn32(0xCFC) >> ((offset & 3) * 8) & 0xff));
-  return ret;
+static u8 pciConfigRead8 (u8 bus, u8 slot, u16 func, u16 offset) {
+  sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
+	   offset);
+  return sysIn8(0xCFC + (offset & 3));
 }
+
+static void pciConfigWrite32 (u8 bus, u8 slot, u16 func, u16 offset,
+			     u32 val) {
+  sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
+	   offset);
+  sysOut32(0xCFC, val);
+}
+
+static void pciConfigWrite16 (u8 bus, u8 slot, u16 func, u16 offset,
+			     u32 val) {
+  sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
+	   offset);
+  sysOut32(0xCFC + (offset & 2), val);
+}
+
+static void pciConfigWrite8 (u8 bus, u8 slot, u16 func, u16 offset,
+			     u32 val) {
+  sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
+	   offset);
+  sysOut32(0xCFC + (offset & 3), val);
+}
+  
+
+static void enumerateDevices(int bus) {
+  u16 vendor;
+  u16 device;
+  u8 header;
+  u8 class;
+  u8 subclass;
+  u8  progif;
+  int i;
+ 
+  for (i = 0; i < 32; i++) {
+    vendor = pciConfigRead16(bus,i,0,0);
+    if (vendor == 0xFFFF)
+      continue;
+    device = pciConfigRead16(bus,i,0,2);
+    header = pciConfigRead8(bus,i,0,14);
+    class = pciConfigRead8(bus,i,0,11);
+    subclass = pciConfigRead8(bus,i,0,10);
+    progif = pciConfigRead8(bus,i,0,9);
+    printf("Bus #%d, Device #%d, Vendor: 0x%x, Device: 0x%x, Header: 0x%x\n",
+	   bus, i, vendor, device, header);
+    printf("  Class code: 0x%x, Subclass: 0x%x, Prog IF: 0x%x\n",
+	   class, subclass, progif);
+    if(header & 1) {
+      enumerateDevices(pciConfigRead8(bus,i,0,25));
+    }
+  }
+}
+    
+
+void pci_init() {
+  int i;
+  u32 bar;
+
+  enumerateDevices(0);
+  printf("Command: 0x%x, Status: 0x%x\n",
+	 pciConfigRead16(2,0,0,4), pciConfigRead16(2,0,0,6));
+  for(i = 0; i < 6; i++) {
+    bar = pciConfigRead32(2,0,0,16+4*i);
+    printf("bar %d: 0x%x\n", i, bar);
+  }
+
+  printf("barloc = %p\n", &bar);
+}
+
