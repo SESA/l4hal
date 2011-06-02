@@ -84,6 +84,7 @@ L4_INLINE L4_Fpage_t L4_Sigma0_GetPage (L4_ThreadId_t s0, L4_Fpage_t f)
     return L4_Sigma0_GetPage_RcvWindow (s0, f, L4_CompleteAddressSpace, 0);
 }
 
+#if defined(__cplusplus)
 L4_INLINE L4_Fpage_t L4_Sigma0_GetPage (L4_ThreadId_t s0,
 					L4_Fpage_t f,
 					L4_Word_t high)
@@ -91,7 +92,9 @@ L4_INLINE L4_Fpage_t L4_Sigma0_GetPage (L4_ThreadId_t s0,
 	f.X.extended = 1;
 	return L4_Sigma0_GetPage_RcvWindow (s0, f, L4_CompleteAddressSpace, high);
 }
+#endif
 
+#if defined(__cplusplus)
 L4_INLINE L4_Fpage_t L4_Sigma0_GetPage (L4_ThreadId_t s0,
 					L4_Fpage_t f,
 					L4_Word_t high,
@@ -100,6 +103,7 @@ L4_INLINE L4_Fpage_t L4_Sigma0_GetPage (L4_ThreadId_t s0,
 	f.X.extended = 1;
 	return L4_Sigma0_GetPage_RcvWindow (s0, f, RcvWindow, high);
 }
+#endif
 
 L4_INLINE L4_Fpage_t L4_Sigma0_GetAny (L4_ThreadId_t s0,
 				      L4_Word_t	s,

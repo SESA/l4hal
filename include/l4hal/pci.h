@@ -29,6 +29,19 @@
 
 #include <l4hal/types.h>
 
+typedef struct {
+  u8 bus;
+  u8 slot;
+  u8 func;
+} PciConfig;
+
+u32 pciConfigRead32(u8 bus, u8 slot, u16 func, u16 offset);
+u16 pciConfigRead16(u8 bus, u8 slot, u16 func, u16 offset);
+u8 pciConfigRead8(u8 bus, u8 slot, u16 func, u16 offset);
+void pciConfigWrite32(u8 bus, u8 slot, u16 func, u16 offset, u32 val);
+void pciConfigWrite16(u8 bus, u8 slot, u16 func, u16 offset, u16 val);
+void pciConfigWrite8(u8 bus, u8 slot, u16 func, u16 offset, u8 val);
+
 void pci_init(void);
 
 #endif

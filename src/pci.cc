@@ -27,41 +27,42 @@
 #include <l4io.h>
 #include <arch/sysio.h>
 #include <l4hal/pci.h>
+#include <l4hal/e1000.h>
 
-static u32 pciConfigRead32 (u8 bus, u8 slot, u16 func, u16 offset) {
+u32 pciConfigRead32 (u8 bus, u8 slot, u16 func, u16 offset) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
   return sysIn32(0xCFC);
 }
 
-static u16 pciConfigRead16 (u8 bus, u8 slot, u16 func, u16 offset) {
+u16 pciConfigRead16 (u8 bus, u8 slot, u16 func, u16 offset) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
   return sysIn16(0xCFC + (offset & 2));
 }
 
-static u8 pciConfigRead8 (u8 bus, u8 slot, u16 func, u16 offset) {
+u8 pciConfigRead8 (u8 bus, u8 slot, u16 func, u16 offset) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
   return sysIn8(0xCFC + (offset & 3));
 }
 
-static void pciConfigWrite32 (u8 bus, u8 slot, u16 func, u16 offset,
+void pciConfigWrite32 (u8 bus, u8 slot, u16 func, u16 offset,
 			     u32 val) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
   sysOut32(0xCFC, val);
 }
 
-static void pciConfigWrite16 (u8 bus, u8 slot, u16 func, u16 offset,
-			     u32 val) {
+void pciConfigWrite16 (u8 bus, u8 slot, u16 func, u16 offset,
+			     u16 val) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
   sysOut32(0xCFC + (offset & 2), val);
 }
 
-static void pciConfigWrite8 (u8 bus, u8 slot, u16 func, u16 offset,
-			     u32 val) {
+void pciConfigWrite8 (u8 bus, u8 slot, u16 func, u16 offset,
+			     u8 val) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
   sysOut32(0xCFC + (offset & 3), val);
@@ -72,7 +73,7 @@ static void enumerateDevices(int bus) {
   u16 vendor;
   u16 device;
   u8 header;
-  u8 class;
+  u8 dev_class;
   u8 subclass;
   u8  progif;
   int i;
@@ -83,19 +84,18 @@ static void enumerateDevices(int bus) {
       continue;
     device = pciConfigRead16(bus,i,0,2);
     header = pciConfigRead8(bus,i,0,14);
-    class = pciConfigRead8(bus,i,0,11);
+    dev_class = pciConfigRead8(bus,i,0,11);
     subclass = pciConfigRead8(bus,i,0,10);
     progif = pciConfigRead8(bus,i,0,9);
     printf("Bus #%d, Device #%d, Vendor: 0x%x, Device: 0x%x, Header: 0x%x\n",
 	   bus, i, vendor, device, header);
     printf("  Class code: 0x%x, Subclass: 0x%x, Prog IF: 0x%x\n",
-	   class, subclass, progif);
+	   dev_class, subclass, progif);
     if(header & 1) {
       enumerateDevices(pciConfigRead8(bus,i,0,25));
     }
   }
 }
-    
 
 void pci_init() {
   int i;
@@ -109,6 +109,6 @@ void pci_init() {
     printf("bar %d: 0x%x\n", i, bar);
   }
 
-  printf("barloc = %p\n", &bar);
+  e1000_init();
 }
 
