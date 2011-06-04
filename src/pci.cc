@@ -103,9 +103,10 @@ void pci_init() {
 
   enumerateDevices(0);
   printf("Command: 0x%x, Status: 0x%x\n",
-	 pciConfigRead16(2,0,0,4), pciConfigRead16(2,0,0,6));
+	 pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,4), 
+	 pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,6));
   for(i = 0; i < 6; i++) {
-    bar = pciConfigRead32(2,0,0,16+4*i);
+    bar = pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,16+4*i);
     printf("bar %d: 0x%x\n", i, bar);
   }
 

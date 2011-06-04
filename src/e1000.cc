@@ -7,7 +7,9 @@
 static struct e1000_hw hw_s;
 static u8 e1000_base[1 << 18];
 static PciConfig p;
-static struct e1000_tx_desc tx_ring[8] __attribute__ ((aligned(16)));
+static struct e1000_tx_desc tx_ring[256] __attribute__ ((aligned(4096)));
+
+void dump_cntrs(void);
 
 void
 e1000_init() {
@@ -16,12 +18,12 @@ e1000_init() {
   u8 *e1000_base2;
 
   //config
-  p.bus = 2;
-  p.slot = 0;
-  p.func = 0;
+  p.bus = E1000_BUS;
+  p.slot = E1000_DEVICE;
+  p.func = E1000_FUNC;
   
   hw_s.back = &p;
-  hw_s.hw_addr = (u8 *)pciConfigRead32(2,0,0,16);
+  hw_s.hw_addr = (u8 *)pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,16);
   //begin mapdevice
   request_fpage = L4_Fpage((u32)hw_s.hw_addr, 1 << 17);
   e1000_base2 = &e1000_base[1 << 17];
@@ -33,12 +35,12 @@ e1000_init() {
 					     rcv_fpage, 0);
   hw_s.hw_addr = (u8 *)L4_Address(rcv_fpage);
   //end mapdevice
-  hw_s.vendor_id = pciConfigRead16(2,0,0,0);
-  hw_s.device_id = pciConfigRead16(2,0,0,2);
-  hw_s.revision_id = pciConfigRead8(2,0,0,8);
-  hw_s.subsystem_vendor_id = pciConfigRead16(2,0,0,0x2c);
-  hw_s.subsystem_id = pciConfigRead16(2,0,0,0x2e);
-  hw_s.pci_cmd_word = pciConfigRead16(2,0,0,0x4);
+  hw_s.vendor_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0);
+  hw_s.device_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,2);
+  hw_s.revision_id = pciConfigRead8(E1000_BUS,E1000_DEVICE,E1000_FUNC,8);
+  hw_s.subsystem_vendor_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2c);
+  hw_s.subsystem_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2e);
+  hw_s.pci_cmd_word = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
   hw_s.max_frame_size = 1500 + ENET_HEADER_SIZE + 
     ETHERNET_FCS_SIZE;
   hw_s.min_frame_size = MINIMUM_ETHERNET_FRAME_SIZE;
@@ -78,13 +80,15 @@ e1000_init() {
 }
 
 void e1000_reset() {
+  int error_code;
   E1000_WRITE_REG(&hw_s, PBA, 0x30);
   hw_s.fc = hw_s.original_fc;
   e1000_reset_hw(&hw_s);
   E1000_WRITE_REG(&hw_s, WUC, 0);
-  e1000_init_hw(&hw_s);
+  error_code = e1000_init_hw(&hw_s);
+  printf("init_hw error code: %d\n", error_code);
   e1000_reset_adaptive(&hw_s);
-  E1000_WRITE_REG(&hw_s, TXDCTL, 0x01000000);
+//   E1000_WRITE_REG(&hw_s, TXDCTL, 0x01000000);
   printf("TXDCTL = 0x%08x\n",
 	 E1000_READ_REG(&hw_s, TXDCTL));
   printf("RXDCTL = 0x%08x\n",
@@ -96,16 +100,18 @@ void e1000_configure_tx() {
   u32 tctl;
   int i;
 
-  for(i = 0; i < 8; i++) {
+  for(i = 0; i < 256; i++) {
     tx_ring[i].buffer_low = 0;
     tx_ring[i].buffer_high = 0;
     tx_ring[i].lower.data = 0;
     tx_ring[i].upper.data = 0;
   }
   
-  E1000_WRITE_REG(&hw_s, TDBAL, (u32)tx_ring);
+//   E1000_WRITE_REG(&hw_s, TDBAL, (u32)tx_ring);
+  E1000_WRITE_REG(&hw_s, TDBAL, 0xFFF00000);
   E1000_WRITE_REG(&hw_s, TDBAH, 0);
   
+  printf("tdlen = %d\n", sizeof(tx_ring));
   E1000_WRITE_REG(&hw_s, TDLEN, sizeof(tx_ring));
 
 
@@ -120,6 +126,11 @@ void e1000_configure_tx() {
   E1000_WRITE_REG(&hw_s, TIDV, 32);
   E1000_WRITE_REG(&hw_s, TADV, 128);
 
+//   E1000_WRITE_REG(&hw_s, RCTL, 
+// 		  E1000_RCTL_EN |
+// 		  E1000_RCTL_SBP |
+// 		  E1000_RCTL_UPE);		
+
   tctl = E1000_READ_REG(&hw_s, TCTL);
 
   tctl &= ~E1000_TCTL_CT;
@@ -130,16 +141,102 @@ void e1000_configure_tx() {
   printf("TCL = 0x%08x\n",
 	 E1000_READ_REG(&hw_s, TCTL));
 
+  E1000_WRITE_REG(&hw_s, TDT, 1);
+
   e1000_config_collision_dist(&hw_s);
 }
 
+#define DUMPREG(reg) \
+  ({volatile uint32_t temp;			\
+  temp = E1000_READ_REG(&hw_s, reg);		\
+  if (temp != 0)				\
+    printf(#reg " = %d\n", temp);		\
+  })
+
+void dump_cntrs() {
+    DUMPREG(CRCERRS);
+    DUMPREG(SYMERRS);
+    DUMPREG(MPC);
+    DUMPREG(SCC);
+    DUMPREG(ECOL);
+    DUMPREG(MCC);
+    DUMPREG(LATECOL);
+    DUMPREG(COLC);
+    DUMPREG(DC);
+    DUMPREG(SEC);
+    DUMPREG(RLEC);
+    DUMPREG(XONRXC);
+    DUMPREG(XONTXC);
+    DUMPREG(XOFFRXC);
+    DUMPREG(XOFFTXC);
+    DUMPREG(FCRUC);
+    DUMPREG(PRC64);
+    DUMPREG(PRC127);
+    DUMPREG(PRC255);
+    DUMPREG(PRC511);
+    DUMPREG(PRC1023);
+    DUMPREG(PRC1522);
+    DUMPREG(GPRC);
+    DUMPREG(BPRC);
+    DUMPREG(MPRC);
+    DUMPREG(GPTC);
+    DUMPREG(GORCL);
+    DUMPREG(GORCH);
+    DUMPREG(GOTCL);
+    DUMPREG(GOTCH);
+    DUMPREG(RNBC);
+    DUMPREG(RUC);
+    DUMPREG(RFC);
+    DUMPREG(ROC);
+    DUMPREG(RJC);
+    DUMPREG(TORL);
+    DUMPREG(TORH);
+    DUMPREG(TOTL);
+    DUMPREG(TOTH);
+    DUMPREG(TPR);
+    DUMPREG(TPT);
+    DUMPREG(PTC64);
+    DUMPREG(PTC127);
+    DUMPREG(PTC255);
+    DUMPREG(PTC511);
+    DUMPREG(PTC1023);
+    DUMPREG(PTC1522);
+    DUMPREG(MPTC);
+    DUMPREG(BPTC);
+    DUMPREG(ALGNERRC);
+    DUMPREG(RXERRC);
+    DUMPREG(TNCRS);
+    DUMPREG(CEXTERR);
+    DUMPREG(TSCTC);
+    DUMPREG(TSCTFC);
+    DUMPREG(MGTPRC);
+    DUMPREG(MGTPDC);
+    DUMPREG(MGTPTC);
+}  
+
 void e1000_send_pkt() {
   struct e1000_tx_desc *tx_desc;
-  u32 vals[16];
-  int i;
+  u8 vals[60];
+  int i, val;
+  
+//   e1000_setup_led(&hw_s);
+//   do {
+//     e1000_led_on(&hw_s);
+//     msec_delay(10);
+//     e1000_led_off(&hw_s);
+//   } while(1);
+  dump_cntrs();
 
-  for (i = 0; i < 16; i++) {
-    vals[i] = 0xdeadbeef;
+  val = E1000_READ_REG(&hw_s, STATUS);
+  printf("STATUS = 0x%X\n", val);
+  
+  for (i = 0; i < 6; i++) {
+    vals[i] = hw_s.mac_addr[i];
+    vals[i+6] = hw_s.mac_addr[i];
+  }
+  ((u16 *)vals)[6] = 0x88b5;
+  for (i = 14; i < 60; i++) {
+    vals[i] = 0x0F;
   }
 
   for(i = 0; i < 8; i++) {
@@ -147,14 +244,27 @@ void e1000_send_pkt() {
     tx_desc->buffer_high = 0;
     tx_desc->buffer_low = (u32)vals;
     
-    tx_desc->lower.flags.length = 64;
+    tx_desc->lower.flags.length = 60;
     tx_desc->lower.flags.cso = 0;
     tx_desc->lower.flags.cmd |= E1000_TXD_CMD_IFCS |
       E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP;
     
-    E1000_WRITE_REG(&hw_s, TDT, 16*i);
+    E1000_WRITE_REG(&hw_s, TDT, i);
   }
+
+  printf("packet should have been sent\n");
+
   do {
+    i = E1000_READ_REG(&hw_s, TDH);
+    if (i != 0) {
+      printf("TDH = %d\n", i);
+    }
+    i = E1000_READ_REG(&hw_s, STATUS);
+    if (i != val) {
+      printf("STATUS = 0x%X\n", i);
+      val = i;
+    }
+    dump_cntrs();
   } while (!(tx_ring[0].upper.fields.status & E1000_TXD_STAT_DD));
   printf("packet sent\n");
 }
