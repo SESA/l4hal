@@ -24,6 +24,9 @@
 /* authors and should not be interpreted as representing official policies, either expressed */
 /* or implied, of Boston University */
 
+#ifndef _SYSIO_H_
+#define _SYSIO_H_
+
 #include <l4hal/types.h>
 
 static inline u32 sysIn32 (u16 port) {
@@ -55,3 +58,5 @@ static inline void sysOut16 (u16 port, u16 val) {
 static inline void sysOut8 (u16 port, u8 val) {
   __asm__ volatile ("outb %b0,%w1"::"a"(val), "Nd" (port));
 }
+
+#endif

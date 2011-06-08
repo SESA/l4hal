@@ -1,10 +1,10 @@
 /*********************************************************************
- *
- * Copyright (C) 2005,  University of Karlsruhe
- *
- * File path:     common/ia32/types.h
- * Description:   The canonical types for IA32.
- *
+ *                
+ * Copyright (C) 2003-2010,  Karlsruhe University
+ *                
+ * File path:     common/ia32/page.h
+ * Description:   
+ *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -25,36 +25,15 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ *                
+ * $Id$
+ *                
  ********************************************************************/
-#ifndef _TYPES_H_
-#define _TYPES_H_
+#ifndef __COMMON__IA32__PAGE_H__
+#define __COMMON__IA32__PAGE_H__
 
-typedef unsigned int __attribute__((__mode__(__DI__))) u64_t;
-typedef unsigned int	u32_t;
-typedef unsigned short	u16_t;
-typedef unsigned char	u8_t;
+#define PAGE_BITS	12
+#define PAGE_SIZE	(UL(1) << PAGE_BITS)
+#define PAGE_MASK	(~(PAGE_SIZE-1))
 
-typedef signed int __attribute__((__mode__(__DI__))) s64_t;
-typedef signed int	s32_t;
-typedef signed short	s16_t;
-typedef signed char	s8_t;
-
-typedef u32_t word_t;
-
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
-typedef unsigned long long u64;
-typedef char s8;
-typedef short s16;
-typedef int s32;
-typedef long long s64;
-
-typedef u16 __le16;
-typedef u32 __le32;
-typedef u64 __le64;
-
-#define NULL (void *)(0)
-
-#endif	/* __COMMON__IA32__TYPES_H__ */
+#endif	/* __COMMON__IA32__PAGE_H__ */

@@ -1,13 +1,19 @@
 #include <l4/sigma0.h>
 #include <arch/sysio.h>
 #include <l4hal/pci.h>
-#include <l4hal/e1000_hw.h>
 #include <l4hal/e1000.h>
+#include <l4hal/e1000_api.h>
+#include <l4/kdebug.h>
+
+
+#define NUM_TX_DESC (128)
+#define NUM_RX_DESC (128)
 
 static struct e1000_hw hw_s;
 static u8 e1000_base[1 << 18];
 static PciConfig p;
-static struct e1000_tx_desc tx_ring[256] __attribute__ ((aligned(4096)));
+static struct e1000_tx_desc tx_ring[NUM_TX_DESC] __attribute__ ((aligned(4096)));
+static struct e1000_rx_desc rx_ring[NUM_RX_DESC] __attribute__ ((aligned(4096)));
 
 void dump_cntrs(void);
 
@@ -34,242 +40,199 @@ e1000_init() {
   result_fpage = L4_Sigma0_GetPage_RcvWindow(L4_nilthread, request_fpage,
 					     rcv_fpage, 0);
   hw_s.hw_addr = (u8 *)L4_Address(rcv_fpage);
+  hw_s.io_base = pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x20);
+  hw_s.io_base &= ~0x1;
+
   //end mapdevice
+  int irq = pciConfigRead8(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x3c);
+  printf("irq = %d\n", irq);
+
   hw_s.vendor_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0);
   hw_s.device_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,2);
   hw_s.revision_id = pciConfigRead8(E1000_BUS,E1000_DEVICE,E1000_FUNC,8);
   hw_s.subsystem_vendor_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2c);
-  hw_s.subsystem_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2e);
-  hw_s.pci_cmd_word = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
-  hw_s.max_frame_size = 1500 + ENET_HEADER_SIZE + 
-    ETHERNET_FCS_SIZE;
-  hw_s.min_frame_size = MINIMUM_ETHERNET_FRAME_SIZE;
-  e1000_set_mac_type(&hw_s);
-  hw_s.fc_high_water = 0xA9C8;
-  hw_s.fc_low_water = 0xA9C0;
-  hw_s.fc_pause_time = 0x0680;
-  hw_s.fc_send_xon = TRUE;
-  hw_s.dma_fairness = TRUE;
-  hw_s.media_type = e1000_media_type_copper;
-  hw_s.report_tx_early = TRUE;
-  hw_s.wait_autoneg_complete = FALSE;
-  hw_s.tbi_compatibility_en = FALSE;
-  hw_s.adaptive_ifs = TRUE;
+  hw_s.subsystem_device_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2e);
+  hw_s.bus.pci_cmd_word = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
 
-  hw_s.mdix = 0;
-  hw_s.disable_polarity_correction = FALSE;
-  if (e1000_validate_eeprom_checksum(&hw_s) < 0) {
-    printf("invalid eeprom,\n");
+  hw_s.fc.requested_mode = e1000_fc_default;
+
+  if (e1000_setup_init_funcs(&hw_s, FALSE)) {
+    printf("Hardware Init failure\n");
+    return;
   }
-  e1000_read_mac_addr(&hw_s);
+
+  //alloc rings
+
+  //irq disable
+  E1000_WRITE_REG(&hw_s, E1000_IMC, ~0);
+  E1000_WRITE_FLUSH(&hw_s);
+  
+  e1000_init_mac_params(&hw_s);
+  e1000_init_nvm_params(&hw_s);
+  e1000_init_phy_params(&hw_s);
+
+  e1000_get_bus_info(&hw_s);
+
+  e1000_init_script_state_82541(&hw_s, TRUE);
+  e1000_set_tbi_compatibility_82543(&hw_s, TRUE);
+  
+  hw_s.phy.autoneg_wait_to_complete = FALSE;
+  hw_s.mac.adaptive_ifs = TRUE;
+
+  if (hw_s.phy.media_type == e1000_media_type_copper) {
+    hw_s.phy.mdix = 0;
+    hw_s.phy.disable_polarity_correction = FALSE;
+    hw_s.phy.ms_type = e1000_ms_hw_default;
+  }
+
+  if (e1000_check_reset_block(&hw_s)) {
+    printf("PHY reset is blocked due to SOL/IDER session.\n");
+    return;
+  }
+
+  e1000_reset_hw(&hw_s);
+  
+  if (e1000_validate_nvm_checksum(&hw_s) < 0) {
+    printf("The NVM Checksum is Not Valid\n");
+    return;
+  }
+
+  if (e1000_read_mac_addr(&hw_s)) {
+    printf("NVM Read Error\n");
+    return;
+  }
+  
   printf("Mac address = ");
-  for (i = 0; i < NODE_ADDRESS_SIZE; i++) {
+  for (i = 0; i < 6; i++) {
     if (i > 0)
       printf(":");
-    printf("%.02X", hw_s.mac_addr[i]);
+    printf("%.02X", hw_s.mac.addr[i]);
   }
   printf("\n");
-  e1000_get_bus_info(&hw_s);
-  hw_s.fc = hw_s.original_fc = e1000_fc_full;
-  hw_s.autoneg = TRUE;
-  hw_s.autoneg_advertised = AUTONEG_ADVERTISE_SPEED_DEFAULT;
-  //reset here  
+
   e1000_reset();
+  e1000_power_up_phy(&hw_s);
   e1000_configure_tx();
   e1000_send_pkt();
 }
 
 void e1000_reset() {
-  int error_code;
-  E1000_WRITE_REG(&hw_s, PBA, 0x30);
-  hw_s.fc = hw_s.original_fc;
-  e1000_reset_hw(&hw_s);
-  E1000_WRITE_REG(&hw_s, WUC, 0);
-  error_code = e1000_init_hw(&hw_s);
-  printf("init_hw error code: %d\n", error_code);
-  e1000_reset_adaptive(&hw_s);
-//   E1000_WRITE_REG(&hw_s, TXDCTL, 0x01000000);
-  printf("TXDCTL = 0x%08x\n",
-	 E1000_READ_REG(&hw_s, TXDCTL));
-  printf("RXDCTL = 0x%08x\n",
-	 E1000_READ_REG(&hw_s, RXDCTL));
-}
+  u16 hwm;
 
+  E1000_WRITE_REG(&hw_s, E1000_PBA, 0x30);
+
+  hwm = ((0x30 << 10) * 9 / 10);
+
+  hw_s.fc.high_water = hwm * 0xFFF8;
+  hw_s.fc.low_water = hw_s.fc.high_water - 8;
+
+  hw_s.fc.pause_time = 0x680;
+  hw_s.fc.send_xon = TRUE;
+  hw_s.fc.current_mode = hw_s.fc.requested_mode;
+
+  e1000_reset_hw(&hw_s);
+
+  E1000_WRITE_REG(&hw_s, E1000_WUC, 0);
+
+  if (e1000_init_hw(&hw_s)) {
+    printf("Hardware Error\n");
+  }
+
+  if (hw_s.mac.type >= e1000_82544 &&
+      hw_s.mac.type <= e1000_82547_rev_2 &&
+      hw_s.mac.autoneg == 1 &&
+      hw_s.phy.autoneg_advertised == ADVERTISE_1000_FULL) {
+    u32 ctrl = E1000_READ_REG(&hw_s, E1000_CTRL);
+    /* clear phy power management bit if we are in gig only mode,
+     * which if enabled will attempt negotiation to 100Mb, which
+     * can cause a loss of link at power off or driver unload */
+    ctrl &= ~E1000_CTRL_SWDPIN3;
+    E1000_WRITE_REG(&hw_s, E1000_CTRL, ctrl);
+  }
+
+  e1000_reset_adaptive(&hw_s);
+  e1000_get_phy_info(&hw_s);
+  
+}
 
 void e1000_configure_tx() {
   u32 tctl;
   int i;
 
-  for(i = 0; i < 256; i++) {
-    tx_ring[i].buffer_low = 0;
-    tx_ring[i].buffer_high = 0;
+  for(i = 0; i < NUM_TX_DESC; i++) {
+    tx_ring[i].buffer_addr = 0;
     tx_ring[i].lower.data = 0;
     tx_ring[i].upper.data = 0;
   }
+
+  E1000_WRITE_REG(&hw_s, E1000_TDBAL(0), (u32)tx_ring);
+
+  E1000_WRITE_REG(&hw_s, E1000_TDBAH(0), 0);
   
-//   E1000_WRITE_REG(&hw_s, TDBAL, (u32)tx_ring);
-  E1000_WRITE_REG(&hw_s, TDBAL, 0xFFF00000);
-  E1000_WRITE_REG(&hw_s, TDBAH, 0);
-  
-  printf("tdlen = %d\n", sizeof(tx_ring));
-  E1000_WRITE_REG(&hw_s, TDLEN, sizeof(tx_ring));
+  E1000_WRITE_REG(&hw_s, E1000_TDLEN(0), sizeof(tx_ring));
 
 
-  E1000_WRITE_REG(&hw_s, TDH, 0);
-  E1000_WRITE_REG(&hw_s, TDT, 0);
+  E1000_WRITE_REG(&hw_s, E1000_TDH(0), 0);
+  E1000_WRITE_REG(&hw_s, E1000_TDT(0), 0);
 
-  E1000_WRITE_REG(&hw_s, TIPG,
+  E1000_WRITE_REG(&hw_s, E1000_TIPG,
 		  DEFAULT_82543_TIPG_IPGT_COPPER |
 		  (DEFAULT_82543_TIPG_IPGR1 << E1000_TIPG_IPGR1_SHIFT) |
 		  (DEFAULT_82543_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT));
 
-  E1000_WRITE_REG(&hw_s, TIDV, 32);
-  E1000_WRITE_REG(&hw_s, TADV, 128);
+  E1000_WRITE_REG(&hw_s, E1000_TIDV, 32);
+  E1000_WRITE_REG(&hw_s, E1000_TADV, 128);
 
-//   E1000_WRITE_REG(&hw_s, RCTL, 
-// 		  E1000_RCTL_EN |
-// 		  E1000_RCTL_SBP |
-// 		  E1000_RCTL_UPE);		
-
-  tctl = E1000_READ_REG(&hw_s, TCTL);
+  tctl = E1000_READ_REG(&hw_s, E1000_TCTL);
 
   tctl &= ~E1000_TCTL_CT;
   tctl |= E1000_TCTL_EN | E1000_TCTL_PSP |
     (E1000_COLLISION_THRESHOLD << E1000_CT_SHIFT);
 
-  E1000_WRITE_REG(&hw_s, TCTL, tctl);
-  printf("TCL = 0x%08x\n",
-	 E1000_READ_REG(&hw_s, TCTL));
-
-  E1000_WRITE_REG(&hw_s, TDT, 1);
-
   e1000_config_collision_dist(&hw_s);
+
+  E1000_WRITE_REG(&hw_s, E1000_TCTL, tctl);
 }
-
-#define DUMPREG(reg) \
-  ({volatile uint32_t temp;			\
-  temp = E1000_READ_REG(&hw_s, reg);		\
-  if (temp != 0)				\
-    printf(#reg " = %d\n", temp);		\
-  })
-
-void dump_cntrs() {
-    DUMPREG(CRCERRS);
-    DUMPREG(SYMERRS);
-    DUMPREG(MPC);
-    DUMPREG(SCC);
-    DUMPREG(ECOL);
-    DUMPREG(MCC);
-    DUMPREG(LATECOL);
-    DUMPREG(COLC);
-    DUMPREG(DC);
-    DUMPREG(SEC);
-    DUMPREG(RLEC);
-    DUMPREG(XONRXC);
-    DUMPREG(XONTXC);
-    DUMPREG(XOFFRXC);
-    DUMPREG(XOFFTXC);
-    DUMPREG(FCRUC);
-    DUMPREG(PRC64);
-    DUMPREG(PRC127);
-    DUMPREG(PRC255);
-    DUMPREG(PRC511);
-    DUMPREG(PRC1023);
-    DUMPREG(PRC1522);
-    DUMPREG(GPRC);
-    DUMPREG(BPRC);
-    DUMPREG(MPRC);
-    DUMPREG(GPTC);
-    DUMPREG(GORCL);
-    DUMPREG(GORCH);
-    DUMPREG(GOTCL);
-    DUMPREG(GOTCH);
-    DUMPREG(RNBC);
-    DUMPREG(RUC);
-    DUMPREG(RFC);
-    DUMPREG(ROC);
-    DUMPREG(RJC);
-    DUMPREG(TORL);
-    DUMPREG(TORH);
-    DUMPREG(TOTL);
-    DUMPREG(TOTH);
-    DUMPREG(TPR);
-    DUMPREG(TPT);
-    DUMPREG(PTC64);
-    DUMPREG(PTC127);
-    DUMPREG(PTC255);
-    DUMPREG(PTC511);
-    DUMPREG(PTC1023);
-    DUMPREG(PTC1522);
-    DUMPREG(MPTC);
-    DUMPREG(BPTC);
-    DUMPREG(ALGNERRC);
-    DUMPREG(RXERRC);
-    DUMPREG(TNCRS);
-    DUMPREG(CEXTERR);
-    DUMPREG(TSCTC);
-    DUMPREG(TSCTFC);
-    DUMPREG(MGTPRC);
-    DUMPREG(MGTPDC);
-    DUMPREG(MGTPTC);
-}  
 
 void e1000_send_pkt() {
   struct e1000_tx_desc *tx_desc;
-  u8 vals[60];
-  int i, val;
-  
-//   e1000_setup_led(&hw_s);
-//   do {
-//     e1000_led_on(&hw_s);
-//     msec_delay(10);
-//     e1000_led_off(&hw_s);
-//   } while(1);
-  dump_cntrs();
-
-  val = E1000_READ_REG(&hw_s, STATUS);
-  printf("STATUS = 0x%X\n", val);
-  
-  for (i = 0; i < 6; i++) {
-    vals[i] = hw_s.mac_addr[i];
-    vals[i+6] = hw_s.mac_addr[i];
+  u8 vals[64];
+  int i;
+   
+  for (i = 6; i < 12; i++) {
+    vals[i] = hw_s.mac.addr[i];
   }
+  vals[0] = 0x00;
+  vals[1] = 0x1d;
+  vals[2] = 0x09;
+  vals[3] = 0x17;
+  vals[4] = 0xa8;
+  vals[5] = 0xd3;
   ((u16 *)vals)[6] = 0x88b5;
-  for (i = 14; i < 60; i++) {
+  for (i = 14; i < 70; i++) {
     vals[i] = 0x0F;
   }
 
-  for(i = 0; i < 8; i++) {
-    tx_desc = &tx_ring[i];
-    tx_desc->buffer_high = 0;
-    tx_desc->buffer_low = (u32)vals;
-    
-    tx_desc->lower.flags.length = 60;
-    tx_desc->lower.flags.cso = 0;
-    tx_desc->lower.flags.cmd |= E1000_TXD_CMD_IFCS |
-      E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP;
-    
-    E1000_WRITE_REG(&hw_s, TDT, i);
-  }
+  i = E1000_READ_REG(&hw_s, E1000_TDT(0));
 
-  printf("packet should have been sent\n");
+  tx_desc = &tx_ring[i];
+  tx_desc->buffer_addr = (u64)vals;
+  
+  tx_desc->lower.flags.length = 70;
+  tx_desc->lower.flags.cso = 0;
+  tx_desc->lower.data |= E1000_TXD_CMD_IFCS |
+    E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP;
+  
+  tx_desc->upper.data = 0;
+  
+  E1000_WRITE_REG(&hw_s, E1000_TDT(0), ((i+1)%NUM_TX_DESC));
 
   do {
-    i = E1000_READ_REG(&hw_s, TDH);
-    if (i != 0) {
-      printf("TDH = %d\n", i);
-    }
-    i = E1000_READ_REG(&hw_s, STATUS);
-    if (i != val) {
-      printf("STATUS = 0x%X\n", i);
-      val = i;
-    }
-    dump_cntrs();
-  } while (!(tx_ring[0].upper.fields.status & E1000_TXD_STAT_DD));
+  } while (!(tx_ring[i].upper.fields.status & E1000_TXD_STAT_DD));
   printf("packet sent\n");
 }
-     
-void
+
+extern "C" void
 e1000_pci_clear_mwi( struct e1000_hw *hw )
 {
     PciConfig *pci_config = (PciConfig *)hw->back;
@@ -285,7 +248,7 @@ e1000_pci_clear_mwi( struct e1000_hw *hw )
 		      command);
 }
 
-void
+extern "C" void
 e1000_pci_set_mwi( struct e1000_hw *hw )
 {
   PciConfig *pci_config = (PciConfig *)hw->back;
@@ -301,7 +264,7 @@ e1000_pci_set_mwi( struct e1000_hw *hw )
 		    command);
 }
 
-void
+extern "C" void
 e1000_read_pci_cfg(struct e1000_hw *hw, u32 reg, u16 *value)
 {
   PciConfig *pci_config = (PciConfig *)hw->back;
@@ -311,7 +274,7 @@ e1000_read_pci_cfg(struct e1000_hw *hw, u32 reg, u16 *value)
 			   reg);
 }
 
-void
+extern "C" void
 e1000_write_pci_cfg(struct e1000_hw *hw, u32 reg, u16 *value)
 {
   PciConfig *pci_config = (PciConfig *)hw->back;
@@ -322,14 +285,20 @@ e1000_write_pci_cfg(struct e1000_hw *hw, u32 reg, u16 *value)
 		   *value);
 }
 
-u32
-e1000_io_read(struct e1000_hw *hw, u32 port)
-{
-  return sysIn32(port);
+extern "C" s32 
+e1000_read_pcie_cap_reg(struct e1000_hw *hw, u32 reg, u16 *value) {
+  printf("UNIMPLEMENTED\n");
+  return 0;
 }
 
-void
-e1000_io_write(struct e1000_hw *hw, u32 port, u32 value)
-{
-  sysOut32(port, value);
-}
+// u32
+// e1000_io_read(struct e1000_hw *hw, u32 port)
+// {
+//   return sysIn32(port);
+// }
+
+// void
+// e1000_io_write(struct e1000_hw *hw, u32 port, u32 value)
+// {
+//   sysOut32(port, value);
+// }

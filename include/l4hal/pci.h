@@ -30,8 +30,8 @@
 #include <l4hal/types.h>
 
 //HARDCODED HACKS
-#define E1000_BUS (0)
-#define E1000_DEVICE (16)
+#define E1000_BUS (2)
+#define E1000_DEVICE (0)
 #define E1000_FUNC (0)
 
 typedef struct {

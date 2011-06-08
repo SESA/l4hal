@@ -100,6 +100,7 @@ static void enumerateDevices(int bus) {
 void pci_init() {
   int i;
   u32 bar;
+  u16 command;
 
   enumerateDevices(0);
   printf("Command: 0x%x, Status: 0x%x\n",
@@ -109,6 +110,12 @@ void pci_init() {
     bar = pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,16+4*i);
     printf("bar %d: 0x%x\n", i, bar);
   }
+
+  command = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
+  command |= 0x4;
+  pciConfigWrite16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4,command);
+  command = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
+  printf("command = 0x%X\n",command);
 
   e1000_init();
 }

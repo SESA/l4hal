@@ -35,7 +35,10 @@ PROGRAM=	root
 PROGRAM_DEPS=	$(top_builddir)/lib/l4/libl4.a \
 		$(top_builddir)/lib/io/libio.a
 
-SRCS=		main.cc pci.cc e1000_hw.c e1000.cc\
+SRCS=		main.cc pci.cc e1000_api.c e1000.cc\
+		e1000_82540.c e1000_82541.c e1000_82542.c \
+		e1000_82543.c e1000_mac.c e1000_manage.c \
+		e1000_nvm.c e1000_phy.c \
 		crt0-$(ARCH).S $($(ARCH)_SRCS)
 
 LIBS+=		-ll4 -lio
