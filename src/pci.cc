@@ -29,6 +29,10 @@
 #include <l4hal/pci.h>
 #include <l4hal/e1000.h>
 
+u8 e1000_bus;
+u8 e1000_slot;
+u16 e1000_func;
+
 u32 pciConfigRead32 (u8 bus, u8 slot, u16 func, u16 offset) {
   sysOut32(0xCF8, 0x80000000 | (bus << 16) | (slot << 11) | (func << 8) |
 	   offset);
@@ -83,6 +87,11 @@ static void enumerateDevices(int bus) {
     if (vendor == 0xFFFF)
       continue;
     device = pciConfigRead16(bus,i,0,2);
+    if(vendor == 0x8086 && device == 0x100f) {
+      e1000_bus = bus;
+      e1000_slot = i;
+      e1000_func = 0;
+    }
     header = pciConfigRead8(bus,i,0,14);
     dev_class = pciConfigRead8(bus,i,0,11);
     subclass = pciConfigRead8(bus,i,0,10);
@@ -104,17 +113,17 @@ void pci_init() {
 
   enumerateDevices(0);
   printf("Command: 0x%x, Status: 0x%x\n",
-	 pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,4), 
-	 pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,6));
+	 pciConfigRead16(e1000_bus,e1000_slot,e1000_func,4), 
+	 pciConfigRead16(e1000_bus,e1000_slot,e1000_func,6));
   for(i = 0; i < 6; i++) {
-    bar = pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,16+4*i);
+    bar = pciConfigRead32(e1000_bus,e1000_slot,e1000_func,16+4*i);
     printf("bar %d: 0x%x\n", i, bar);
   }
 
-  command = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
+  command = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,0x4);
   command |= 0x4;
-  pciConfigWrite16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4,command);
-  command = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
+  pciConfigWrite16(e1000_bus,e1000_slot,e1000_func,0x4,command);
+  command = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,0x4);
   printf("command = 0x%X\n",command);
 
   e1000_init();

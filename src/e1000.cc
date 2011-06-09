@@ -24,12 +24,12 @@ e1000_init() {
   u8 *e1000_base2;
 
   //config
-  p.bus = E1000_BUS;
-  p.slot = E1000_DEVICE;
-  p.func = E1000_FUNC;
+  p.bus = e1000_bus;
+  p.slot = e1000_slot;
+  p.func = e1000_func;
   
   hw_s.back = &p;
-  hw_s.hw_addr = (u8 *)pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,16);
+  hw_s.hw_addr = (u8 *)pciConfigRead32(e1000_bus,e1000_slot,e1000_func,16);
   //begin mapdevice
   request_fpage = L4_Fpage((uval)hw_s.hw_addr, 1 << 17);
   e1000_base2 = &e1000_base[1 << 17];
@@ -40,19 +40,19 @@ e1000_init() {
   result_fpage = L4_Sigma0_GetPage_RcvWindow(L4_nilthread, request_fpage,
 					     rcv_fpage, 0);
   hw_s.hw_addr = (u8 *)L4_Address(rcv_fpage);
-  hw_s.io_base = pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x20);
+  hw_s.io_base = pciConfigRead32(e1000_bus,e1000_slot,e1000_func,0x20);
   hw_s.io_base &= ~0x1;
 
   //end mapdevice
-  int irq = pciConfigRead8(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x3c);
+  int irq = pciConfigRead8(e1000_bus,e1000_slot,e1000_func,0x3c);
   printf("irq = %d\n", irq);
 
-  hw_s.vendor_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0);
-  hw_s.device_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,2);
-  hw_s.revision_id = pciConfigRead8(E1000_BUS,E1000_DEVICE,E1000_FUNC,8);
-  hw_s.subsystem_vendor_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2c);
-  hw_s.subsystem_device_id = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x2e);
-  hw_s.bus.pci_cmd_word = pciConfigRead16(E1000_BUS,E1000_DEVICE,E1000_FUNC,0x4);
+  hw_s.vendor_id = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,0);
+  hw_s.device_id = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,2);
+  hw_s.revision_id = pciConfigRead8(e1000_bus,e1000_slot,e1000_func,8);
+  hw_s.subsystem_vendor_id = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,0x2c);
+  hw_s.subsystem_device_id = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,0x2e);
+  hw_s.bus.pci_cmd_word = pciConfigRead16(e1000_bus,e1000_slot,e1000_func,0x4);
 
   hw_s.fc.requested_mode = e1000_fc_default;
 
