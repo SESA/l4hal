@@ -15,7 +15,7 @@ static u8 e1000_base[1 << 18];
 static PciConfig p;
 static volatile struct e1000_tx_desc tx_ring[NUM_TX_DESC] __attribute__ ((aligned(4096)));
 static volatile struct e1000_rx_desc rx_ring[NUM_RX_DESC] __attribute__ ((aligned(4096)));
-static u8 rx_buf[2048];
+static u8 rx_buf[NUM_RX_DESC][2048];
 
 void
 e1000_init() {
@@ -172,7 +172,7 @@ void e1000_configure_rx() {
   sval i;
 
   for(i = 0; i < NUM_RX_DESC; i++) {
-    rx_ring[i].buffer_addr = (u64)rx_buf;
+    rx_ring[i].buffer_addr = (u64)rx_buf[i];
     rx_ring[i].length = 0;
     rx_ring[i].csum = 0;
     rx_ring[i].status = 0;
@@ -193,10 +193,12 @@ void e1000_configure_rx() {
   rctl |= E1000_RCTL_EN | E1000_RCTL_BAM | E1000_RCTL_SECRC;
 
   E1000_WRITE_REG(&hw_s, E1000_RCTL, rctl);
+  E1000_WRITE_REG(&hw_s, E1000_RDT(0), NUM_RX_DESC-1);
 }
 
 sval e1000_read(void *buf, uval len) {
   uval index;
+  uval i;
   volatile struct e1000_rx_desc *rx_desc;
 
   if (len > 1514) {
@@ -205,19 +207,22 @@ sval e1000_read(void *buf, uval len) {
   }
 
   index = E1000_READ_REG(&hw_s, E1000_RDT(0));
+  index = (index + 1) % NUM_RX_DESC;
   rx_desc = &rx_ring[index];
-  E1000_WRITE_REG(&hw_s, E1000_RDT(0), (index + 1) % NUM_RX_DESC);
   while(!(rx_desc->status & E1000_RXD_STAT_DD));
+
   if(rx_desc->errors) {
     printf("rx error\n");
     return -1;
   }
+
   len = rx_desc->length < len ? rx_desc->length : len;
-  for(index = 0; index < len; index++) {
-    ((char *)buf)[index] = rx_buf[index];
+  for(i = 0; i < len; i++) {
+    ((char *)buf)[index] = rx_buf[index][index];
   }
   rx_desc->status = 0;
 
+  E1000_WRITE_REG(&hw_s, E1000_RDT(0), index);
   return len;
 }
   
