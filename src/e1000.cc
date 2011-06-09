@@ -19,6 +19,7 @@ static u8 rx_buf[NUM_RX_DESC][2048];
 
 void
 e1000_init() {
+  sval ret;
   int i;
   L4_Fpage_t request_fpage, rcv_fpage, result_fpage;
   u8 *e1000_base2;
@@ -123,9 +124,17 @@ e1000_init() {
   }
 
   e1000_configure_rx();
-  if(e1000_read(vals, 1514) > 0) {
-    printf("packet received\n");
+  if((ret = e1000_read(vals, 1514)) < 0) {
+    printf("receive failed\n");
   }
+
+  //this will look funny because im also printing out the
+  //mac addrs, but it at least shows how to use it
+  printf("ret = %d\n", ret);
+  for(i = 0; i < ret; i++) {
+    printf("%c", vals[i]);
+  }
+  printf("\n");
 }
 
 void e1000_reset() {
@@ -221,9 +230,9 @@ sval e1000_read(void *buf, uval len) {
   }
 
   //fetch min(len, dma_len) into buffer (discard any extra)
-  len = rx_desc->length < len ? rx_desc->length : len;
+  len = (rx_desc->length < len) ? rx_desc->length : len;
   for(i = 0; i < len; i++) {
-    ((char *)buf)[index] = rx_buf[index][index];
+    ((char *)buf)[i] = rx_buf[index][i];
   }
 
   //clean up the buffer and make it ready to receive again
