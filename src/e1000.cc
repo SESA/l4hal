@@ -3,6 +3,7 @@
 #include <l4hal/pci.h>
 #include <l4hal/e1000.h>
 #include <l4hal/e1000_api.h>
+#include <l4hal/types.h>
 #include <l4/kdebug.h>
 
 
@@ -31,10 +32,10 @@ e1000_init() {
   hw_s.back = &p;
   hw_s.hw_addr = (u8 *)pciConfigRead32(E1000_BUS,E1000_DEVICE,E1000_FUNC,16);
   //begin mapdevice
-  request_fpage = L4_Fpage((u32)hw_s.hw_addr, 1 << 17);
+  request_fpage = L4_Fpage((uval)hw_s.hw_addr, 1 << 17);
   e1000_base2 = &e1000_base[1 << 17];
-  e1000_base2 = (u8 *)(((u32)e1000_base2) & ~((1 << 17) - 1));
-  rcv_fpage = L4_Fpage((u32)e1000_base2, 1 << 17);
+  e1000_base2 = (u8 *)(((uval)e1000_base2) & ~((1 << 17) - 1));
+  rcv_fpage = L4_Fpage((uval)e1000_base2, 1 << 17);
   L4_Set_Rights(&request_fpage, L4_Readable | L4_Writable);
   L4_Set_Rights(&rcv_fpage, L4_Readable | L4_Writable);
   result_fpage = L4_Sigma0_GetPage_RcvWindow(L4_nilthread, request_fpage,
@@ -165,9 +166,9 @@ void e1000_configure_tx() {
     tx_ring[i].upper.data = 0;
   }
 
-  E1000_WRITE_REG(&hw_s, E1000_TDBAL(0), (u32)tx_ring);
+  E1000_WRITE_REG(&hw_s, E1000_TDBAL(0), (u32)(((uval)tx_ring) & 0xFFFFFFFF));
 
-  E1000_WRITE_REG(&hw_s, E1000_TDBAH(0), 0);
+  E1000_WRITE_REG(&hw_s, E1000_TDBAH(0), (u32)(((uval)tx_ring) >> 32));
   
   E1000_WRITE_REG(&hw_s, E1000_TDLEN(0), sizeof(tx_ring));
 

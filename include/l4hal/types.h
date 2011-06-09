@@ -30,26 +30,16 @@
 #ifndef _TYPES_H_
 #define _TYPES_H_
 
-typedef unsigned int __attribute__((__mode__(__DI__))) u64_t;
-typedef unsigned int	u32_t;
-typedef unsigned short	u16_t;
-typedef unsigned char	u8_t;
-
-typedef signed int __attribute__((__mode__(__DI__))) s64_t;
-typedef signed int	s32_t;
-typedef signed short	s16_t;
-typedef signed char	s8_t;
-
-typedef u32_t word_t;
-
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
+typedef unsigned long uval;
 typedef char s8;
 typedef short s16;
 typedef int s32;
 typedef long long s64;
+typedef long sval;
 
 typedef u16 __le16;
 typedef u32 __le32;
