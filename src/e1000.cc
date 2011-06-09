@@ -13,10 +13,9 @@
 static struct e1000_hw hw_s;
 static u8 e1000_base[1 << 18];
 static PciConfig p;
-static struct e1000_tx_desc tx_ring[NUM_TX_DESC] __attribute__ ((aligned(4096)));
-static struct e1000_rx_desc rx_ring[NUM_RX_DESC] __attribute__ ((aligned(4096)));
-
-void dump_cntrs(void);
+static volatile struct e1000_tx_desc tx_ring[NUM_TX_DESC] __attribute__ ((aligned(4096)));
+static volatile struct e1000_rx_desc rx_ring[NUM_RX_DESC] __attribute__ ((aligned(4096)));
+static u8 rx_buf[2048];
 
 void
 e1000_init() {
@@ -114,7 +113,19 @@ e1000_init() {
   e1000_reset();
   e1000_power_up_phy(&hw_s);
   e1000_configure_tx();
-  e1000_send_pkt();
+
+  u8 vals[1514];
+  for (i = 0; i < 1514; i++) {
+    vals[i] = 0xF0;
+  }
+  if(e1000_write(vals, 1514) == 0) {
+    printf("packet sent\n");
+  }
+
+  e1000_configure_rx();
+  if(e1000_read(vals, 1514) > 0) {
+    printf("packet received\n");
+  }
 }
 
 void e1000_reset() {
@@ -156,6 +167,61 @@ void e1000_reset() {
   
 }
 
+void e1000_configure_rx() {
+  u32 rctl;
+  sval i;
+
+  for(i = 0; i < NUM_RX_DESC; i++) {
+    rx_ring[i].buffer_addr = (u64)rx_buf;
+    rx_ring[i].length = 0;
+    rx_ring[i].csum = 0;
+    rx_ring[i].status = 0;
+    rx_ring[i].errors = 0;
+    rx_ring[i].special = 0;
+  }
+
+  e1000_rar_set(&hw_s, hw_s.mac.addr, 0);
+
+  E1000_WRITE_REG(&hw_s, E1000_RDBAL(0),
+		  (u32)(((uval)rx_ring) & 0xFFFFFFFF));
+  E1000_WRITE_REG(&hw_s, E1000_RDBAH(0), (u32)(((uval)rx_ring) >> 32));
+  E1000_WRITE_REG(&hw_s, E1000_RDLEN(0), sizeof(rx_ring));
+  E1000_WRITE_REG(&hw_s, E1000_RDH(0), 0);
+  E1000_WRITE_REG(&hw_s, E1000_RDT(0), 0);
+
+  rctl = E1000_READ_REG(&hw_s, E1000_RCTL);
+  rctl |= E1000_RCTL_EN | E1000_RCTL_BAM | E1000_RCTL_SECRC;
+
+  E1000_WRITE_REG(&hw_s, E1000_RCTL, rctl);
+}
+
+sval e1000_read(void *buf, uval len) {
+  uval index;
+  volatile struct e1000_rx_desc *rx_desc;
+
+  if (len > 1514) {
+    printf("receive length too long\n");
+    return -1;
+  }
+
+  index = E1000_READ_REG(&hw_s, E1000_RDT(0));
+  rx_desc = &rx_ring[index];
+  E1000_WRITE_REG(&hw_s, E1000_RDT(0), (index + 1) % NUM_RX_DESC);
+  while(!(rx_desc->status & E1000_RXD_STAT_DD));
+  if(rx_desc->errors) {
+    printf("rx error\n");
+    return -1;
+  }
+  len = rx_desc->length < len ? rx_desc->length : len;
+  for(index = 0; index < len; index++) {
+    ((char *)buf)[index] = rx_buf[index];
+  }
+  rx_desc->status = 0;
+
+  return len;
+}
+  
+
 void e1000_configure_tx() {
   u32 tctl;
   int i;
@@ -195,42 +261,36 @@ void e1000_configure_tx() {
   E1000_WRITE_REG(&hw_s, E1000_TCTL, tctl);
 }
 
-void e1000_send_pkt() {
-  struct e1000_tx_desc *tx_desc;
-  u8 vals[64];
-  int i;
-   
-  for (i = 6; i < 12; i++) {
-    vals[i] = hw_s.mac.addr[i];
-  }
-  vals[0] = 0x00;
-  vals[1] = 0x1d;
-  vals[2] = 0x09;
-  vals[3] = 0x17;
-  vals[4] = 0xa8;
-  vals[5] = 0xd3;
-  ((u16 *)vals)[6] = 0x88b5;
-  for (i = 14; i < 70; i++) {
-    vals[i] = 0x0F;
-  }
+sval e1000_write(void *buf, uval len) {
+  uval i;
+  volatile struct e1000_tx_desc *tx_desc;
 
+  if (len > 1514) {
+    printf("Packet too long\n");
+    return -1;
+  }
+  
   i = E1000_READ_REG(&hw_s, E1000_TDT(0));
 
   tx_desc = &tx_ring[i];
-  tx_desc->buffer_addr = (u64)vals;
-  
-  tx_desc->lower.flags.length = 70;
+  tx_desc->buffer_addr = (u64)buf;
+
+  tx_desc->lower.flags.length = len;
   tx_desc->lower.flags.cso = 0;
   tx_desc->lower.data |= E1000_TXD_CMD_IFCS |
     E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP;
-  
+
   tx_desc->upper.data = 0;
-  
+
   E1000_WRITE_REG(&hw_s, E1000_TDT(0), ((i+1)%NUM_TX_DESC));
 
-  do {
-  } while (!(tx_ring[i].upper.fields.status & E1000_TXD_STAT_DD));
-  printf("packet sent\n");
+  while (!tx_ring[i].upper.fields.status);
+  if (tx_ring[i].upper.fields.status & E1000_TXD_STAT_DD) {
+    return 0;
+  } else {
+    printf("Packet sending failed\n");
+    return -1;
+  }
 }
 
 extern "C" void
@@ -291,15 +351,3 @@ e1000_read_pcie_cap_reg(struct e1000_hw *hw, u32 reg, u16 *value) {
   printf("UNIMPLEMENTED\n");
   return 0;
 }
-
-// u32
-// e1000_io_read(struct e1000_hw *hw, u32 port)
-// {
-//   return sysIn32(port);
-// }
-
-// void
-// e1000_io_write(struct e1000_hw *hw, u32 port, u32 value)
-// {
-//   sysOut32(port, value);
-// }
