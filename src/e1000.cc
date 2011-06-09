@@ -180,6 +180,7 @@ void e1000_configure_rx() {
     rx_ring[i].special = 0;
   }
 
+  //make sure we accept any packets directed to us
   e1000_rar_set(&hw_s, hw_s.mac.addr, 0);
 
   E1000_WRITE_REG(&hw_s, E1000_RDBAL(0),
@@ -193,6 +194,8 @@ void e1000_configure_rx() {
   rctl |= E1000_RCTL_EN | E1000_RCTL_BAM | E1000_RCTL_SECRC;
 
   E1000_WRITE_REG(&hw_s, E1000_RCTL, rctl);
+
+  //make the entire ring available for receiving
   E1000_WRITE_REG(&hw_s, E1000_RDT(0), NUM_RX_DESC-1);
 }
 
@@ -209,6 +212,7 @@ sval e1000_read(void *buf, uval len) {
   index = E1000_READ_REG(&hw_s, E1000_RDT(0));
   index = (index + 1) % NUM_RX_DESC;
   rx_desc = &rx_ring[index];
+  //block on receive (or fall through if already received)
   while(!(rx_desc->status & E1000_RXD_STAT_DD));
 
   if(rx_desc->errors) {
@@ -216,10 +220,13 @@ sval e1000_read(void *buf, uval len) {
     return -1;
   }
 
+  //fetch min(len, dma_len) into buffer (discard any extra)
   len = rx_desc->length < len ? rx_desc->length : len;
   for(i = 0; i < len; i++) {
     ((char *)buf)[index] = rx_buf[index][index];
   }
+
+  //clean up the buffer and make it ready to receive again
   rx_desc->status = 0;
 
   E1000_WRITE_REG(&hw_s, E1000_RDT(0), index);
@@ -289,6 +296,7 @@ sval e1000_write(void *buf, uval len) {
 
   E1000_WRITE_REG(&hw_s, E1000_TDT(0), ((i+1)%NUM_TX_DESC));
 
+  //block until we get confirmation that it was sent out
   while (!tx_ring[i].upper.fields.status);
   if (tx_ring[i].upper.fields.status & E1000_TXD_STAT_DD) {
     return 0;
