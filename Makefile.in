@@ -76,7 +76,7 @@ HEADER_FILES=	l4io.h \
 		l4/powerpc64/types.h \
 		l4/powerpc64/vregs.h
 
-SUBDIRS=	lib serv src util contrib
+SUBDIRS=	lib serv apps util contrib
 
 pre-all:
 	@if test ! -e ./include; then \

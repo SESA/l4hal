@@ -339,7 +339,12 @@ lib/l4/Makefile
 lib/io/Makefile
 serv/Makefile
 serv/sigma0/Makefile
-src/Makefile
+apps/Makefile
+apps/bench/Makefile
+apps/bench/pingpong/Makefile
+apps/grabmem/Makefile
+apps/l4test/Makefile
+apps/ebbapp/Makefile
 util/Makefile
 util/kickstart/Makefile
 util/grubdisk/Makefile

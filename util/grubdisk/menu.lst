@@ -32,7 +32,7 @@
 ######################################################################
 timeout 0
 
-title = L4Ka::Pistachio L4HAL 
+title = L4Ka::Pistachio pingpong 
 kernel=/kickstart.gz
 module=/kernel.gz
 module=/sigma0.gz

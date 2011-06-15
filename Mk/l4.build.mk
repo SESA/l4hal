@@ -30,7 +30,7 @@
 ##                
 ######################################################################
 
-VPATH=		$(srcdir)
+VPATH=		$(srcdir) $(EBBLIB_APP_DIR)
 MAKEFILES=	.depend
 
 MKFILE_DEPS=	Makefile \
