@@ -36,19 +36,24 @@ top_builddir=	@top_builddir@
 include $(top_srcdir)/Mk/l4.base.mk
 
 APP := counter_test
-EBBLIB_DIR := $(top_srcdir)/../../EBBlib
+EBBLIB_DIR := $(top_srcdir)/../EBBlib
 EBBLIB_APP_DIR := $(EBBLIB_DIR)/apps/$(APP)
+EBBLIB_INSTALL_DIR := $(EBBLIB_DIR)/install
 
 PROGRAM=	ebbapp
 PROGRAM_DEPS=	$(top_builddir)/lib/l4/libl4.a \
 		$(top_builddir)/lib/io/libio.a \
-		$(EBBLIB_DIR)/build/libebb.a
+		$(EBBLIB_INSTALL_DIR)/lib/libebb.a
 
 SRCS=		crt0-$(ARCH).S main.cc pager.cc init_vcpu.cc vcpu.cc
 
+.SECONDEXPANSION:
+$(SRCS): $(EBBLIB_APP_DIR)/$$@
+	cp $< $(srcdir)/
+
 LIBS+=		-ll4 -lio -lebb
-LDFLAGS+=	-Ttext=$(ROOTTASK_LINKBASE) -L$(EBBLIB_DIR)/build
-CFLAGS+=	-I$(EBBLIB_DIR)/libs -DL4
+LDFLAGS+=	-Ttext=$(ROOTTASK_LINKBASE) -L$(EBBLIB_INSTALL_DIR)/lib
+CFLAGS+=	-I$(EBBLIB_INSTALL_DIR)/include/ -DL4
 CFLAGS_powerpc+=	-fno-builtin -msoft-float
 CXXFLAGS_powerpc+=	-fno-rtti
 
